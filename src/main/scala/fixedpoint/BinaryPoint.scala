@@ -15,7 +15,6 @@ import chisel3.{Bundle, ChiselException, Num}
 /** Chisel types that have binary points support retrieving
   * literal values as `Double` or `BigDecimal`
   */
-
 object NumBP {
   def toDouble(value: BigInt, binaryPoint: BinaryPoint): Double = {
     binaryPoint match {
@@ -81,7 +80,7 @@ object BinaryPoint {
 
 sealed abstract class BinaryPoint {
   type W = Int
-  def max(that:              BinaryPoint): BinaryPoint = this.op(that, _ max _)
+  def max(that:              BinaryPoint): BinaryPoint = this.op(that, _.max(_))
   def +(that:                BinaryPoint): BinaryPoint = this.op(that, _ + _)
   def +(that:                Int):         BinaryPoint = this.op(this, (a, b) => a + that)
   def shiftRight(that:       Int): BinaryPoint = this.op(this, (a, b) => 0.max(a - that))

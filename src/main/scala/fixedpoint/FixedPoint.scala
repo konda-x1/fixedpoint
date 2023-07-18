@@ -81,13 +81,25 @@ object FixedPoint extends NumObject {
 
   /** Create a FixedPoint bundle with its data port connected to an SInt literal
     */
-  private[fixedpoint] def fromData(width: Width, binaryPoint: BinaryPoint, data: SInt): FixedPoint = {
-    val _new = Wire(FixedPoint(width, binaryPoint))
+  private[fixedpoint] def fromData(
+    binaryPoint: BinaryPoint,
+    data:        SInt,
+    widthOption: Option[Width] = None
+  ): FixedPoint = {
+    val _new = Wire(
+      FixedPoint(
+        widthOption match {
+          case Some(width) => width
+          case None        => FixedPoint.recreateWidth(data)
+        },
+        binaryPoint
+      )
+    )
     _new.data := data
     _new
   }
 
-  private def recreateWidth[T <: Data](d: T): Width = d.widthOption match {
+  private[fixedpoint] def recreateWidth[T <: Data](d: T): Width = d.widthOption match {
     case Some(w) => w.W
     case None    => Width()
   }
@@ -116,9 +128,9 @@ object FixedPoint extends NumObject {
         case el: FixedPoint =>
           val shift = maxBP.get - el.binaryPoint.get
           fromData(
-            maxWidth,
             maxBP,
-            (if (shift > 0) el.data << shift else el.data).asSInt
+            (if (shift > 0) el.data << shift else el.data).asSInt,
+            Some(maxWidth)
           ).asInstanceOf[T]
         case nonFp => nonFp
       }
@@ -166,9 +178,9 @@ sealed class FixedPoint private[fixedpoint] (width: Width, private var _inferred
     require(_inferredBinaryPoint.isInstanceOf[KnownBinaryPoint], message)
   }
 
-  private def additiveOp(that: FixedPoint, f: (SInt, SInt) => SInt, width: Width = Width()): FixedPoint = {
+  private def additiveOp(that: FixedPoint, f: (SInt, SInt) => SInt): FixedPoint = {
     val Seq(dis, dat) = FixedPoint.dataAligned(this, that)
-    FixedPoint.fromData(width, _inferredBinaryPoint.max(that._inferredBinaryPoint), f(dis.data, dat.data))
+    FixedPoint.fromData(_inferredBinaryPoint.max(that._inferredBinaryPoint), f(dis.data, dat.data))
   }
 
   private def comparativeOp(that: FixedPoint, f: (SInt, SInt) => Bool): Bool = {
@@ -205,7 +217,7 @@ sealed class FixedPoint private[fixedpoint] (width: Width, private var _inferred
     additiveOp(that, _ - _)
 
   override def do_*(that: FixedPoint)(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): FixedPoint =
-    FixedPoint.fromData(Width(), _inferredBinaryPoint + that._inferredBinaryPoint, data * that.data)
+    FixedPoint.fromData(_inferredBinaryPoint + that._inferredBinaryPoint, data * that.data)
 
   override def do_/(that: FixedPoint)(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): FixedPoint =
     throw new ChiselException(s"division is illegal on FixedPoint types")
@@ -226,30 +238,30 @@ sealed class FixedPoint private[fixedpoint] (width: Width, private var _inferred
     comparativeOp(that, _ >= _)
 
   override def do_abs(implicit sourceInfo: SourceInfo, compileOptions: CompileOptions): FixedPoint =
-    FixedPoint.fromData(Width(), _inferredBinaryPoint, data.abs)
+    FixedPoint.fromData(_inferredBinaryPoint, data.abs)
 
   def +%(that: FixedPoint): FixedPoint = additiveOp(that, _ +% _)
   def +&(that: FixedPoint): FixedPoint = additiveOp(that, _ +& _)
   def -%(that: FixedPoint): FixedPoint = additiveOp(that, _ -% _)
   def -&(that: FixedPoint): FixedPoint = additiveOp(that, _ -& _)
-  def unary_-  : FixedPoint = FixedPoint.fromData(width, _inferredBinaryPoint, -data)
-  def unary_-% : FixedPoint = FixedPoint.fromData(width, _inferredBinaryPoint, data.unary_-%)
+  def unary_-  : FixedPoint = FixedPoint.fromData(_inferredBinaryPoint, -data)
+  def unary_-% : FixedPoint = FixedPoint.fromData(_inferredBinaryPoint, data.unary_-%)
   def ===(that: FixedPoint): Bool = comparativeOp(that, _ === _)
   def =/=(that: FixedPoint): Bool = comparativeOp(that, _ =/= _)
   def !=(that:  FixedPoint): Bool = comparativeOp(that, _ =/= _)
 
   def >>(that: Int): FixedPoint =
-    FixedPoint.fromData(Width(), _inferredBinaryPoint, (data >> that).asSInt)
+    FixedPoint.fromData(_inferredBinaryPoint, (data >> that).asSInt)
   def >>(that: BigInt): FixedPoint =
-    FixedPoint.fromData(Width(), _inferredBinaryPoint, (data >> that).asSInt)
+    FixedPoint.fromData(_inferredBinaryPoint, (data >> that).asSInt)
   def >>(that: UInt): FixedPoint =
-    FixedPoint.fromData(Width(), _inferredBinaryPoint, (data >> that).asSInt)
+    FixedPoint.fromData(_inferredBinaryPoint, (data >> that).asSInt)
   def <<(that: Int): FixedPoint =
-    FixedPoint.fromData(Width(), _inferredBinaryPoint, (data << that).asSInt)
+    FixedPoint.fromData(_inferredBinaryPoint, (data << that).asSInt)
   def <<(that: BigInt): FixedPoint =
-    FixedPoint.fromData(Width(), _inferredBinaryPoint, (data << that).asSInt)
+    FixedPoint.fromData(_inferredBinaryPoint, (data << that).asSInt)
   def <<(that: UInt): FixedPoint =
-    FixedPoint.fromData(Width(), _inferredBinaryPoint, (data << that).asSInt)
+    FixedPoint.fromData(_inferredBinaryPoint, (data << that).asSInt)
 
   override def connect(that: Data)(implicit sourceInfo: SourceInfo, connectCompileOptions: CompileOptions): Unit =
     connectOp(that, _ := _)(sourceInfo, connectCompileOptions)
@@ -277,7 +289,7 @@ sealed class FixedPoint private[fixedpoint] (width: Width, private var _inferred
   final def asFixedPoint(binaryPoint: BinaryPoint): FixedPoint = {
     binaryPoint match {
       case KnownBinaryPoint(_) =>
-        FixedPoint.fromData(width, binaryPoint, data)
+        FixedPoint.fromData(binaryPoint, data, Some(width))
       case UnknownBinaryPoint =>
         throw new ChiselException(
           s"cannot call $this.asFixedPoint(binaryPoint=$binaryPoint), you must specify a known binaryPoint"
@@ -290,10 +302,10 @@ sealed class FixedPoint private[fixedpoint] (width: Width, private var _inferred
       case KnownBinaryPoint(current) =>
         val diff = that - current
         FixedPoint.fromData(
-          width + diff,
           that.BP,
           (if (diff >= 0) { data << diff }
-           else { data >> -diff }).asSInt
+           else { data >> -diff }).asSInt,
+          Some(width + diff)
         )
       case UnknownBinaryPoint =>
         throw new ChiselException(
