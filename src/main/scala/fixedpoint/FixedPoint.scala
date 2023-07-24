@@ -14,12 +14,10 @@
 
 package fixedpoint
 
-import chisel3.{fromIntToBinaryPoint => _, fromDoubleToLiteral => _, _}
 import chisel3.experimental.BundleLiterals.AddBundleLiteralConstructor
 import chisel3.internal.firrtl.Width
 import chisel3.internal.sourceinfo.SourceInfo
-import chisel3.stage.ChiselStage
-import fixedpoint.shadow.{Mux, Mux1H, MuxCase, MuxLookup, PriorityMux}
+import chisel3.{fromDoubleToLiteral => _, fromIntToBinaryPoint => _, _}
 
 object FixedPoint extends NumObject {
 
@@ -76,8 +74,10 @@ object FixedPoint extends NumObject {
   }
 
   /** Create a FixedPoint port with specified width and binary position. */
-  def apply(value: BigInt, width: Width, binaryPoint: BinaryPoint): FixedPoint =
-    new FixedPoint(width, binaryPoint).Lit(_.data -> value.S(width))
+  def apply(value: BigInt, width: Width, binaryPoint: BinaryPoint): FixedPoint = {
+    val _width = if(width.known) width else (1 + value.bitLength).W
+    new FixedPoint(_width, binaryPoint).Lit(_.data -> value.S(_width))
+  }
 
   /** Create a FixedPoint bundle with its data port connected to an SInt literal
     */
